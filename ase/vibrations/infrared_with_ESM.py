@@ -15,7 +15,7 @@ import ase.io
 from ase.parallel import world, paropen, parprint
 
 from ase.utils.filecache import get_json_cache
-from ase.io.espresso import grep_valence
+from ase.io.espresso import grep_valence, Namelist
 from .data import VibrationsData
 
 from collections import namedtuple
@@ -92,7 +92,8 @@ class Displacement(namedtuple("Displacement", ["a", "i", "sign", "ndisp", "vib"]
 
 
 class Infrared_with_ESM(AtomicDisplacements):
-    """Class for calculating vibrational modes using finite difference.
+    """Class for calculating vibrational modes and infrared (IR) intensities
+    using finite difference.
 
     The vibrational modes are calculated from a finite difference
     approximation of the Hessian matrix.
@@ -118,40 +119,37 @@ class Infrared_with_ESM(AtomicDisplacements):
         Number of displacements per atom and cartesian coordinate, 2 and 4 are
         supported. Default is 2 which will displace each atom +delta and
         -delta for each cartesian coordinate.
+    directions : list of int  
+        Cartesian directions used to compute the dipole moment gradient.  
+        For example, `directions = [2]` considers only the dipole moment
+        along the z-direction.  
+        This option should generally be `[2]` when using this module with ESM,  
+        so you usually do not need to modify it.  
+    calc_obj : calculator object  
+        The calculator used for computations (e.g., Espresso).  
+    calc_kwargs : dict  
+        Dictionary of parameters to pass to the calculator (e.g., input_data).  
+        **Important:**  
+        The `'pseudo_dir'` parameter **must** be specified, because the
+        valence electrons of each atom are read from the pseudopotential file (`.p.p.`)
+        in order to calculate the dipole moment from the `.esm1` file.  
 
-    Example:
-
-    >>> from ase import Atoms
-    >>> from ase.calculators.emt import EMT
-    >>> from ase.optimize import BFGS
-    >>> from ase.vibrations import Vibrations
-    >>> n2 = Atoms('N2', [(0, 0, 0), (0, 0, 1.1)],
-    ...            calculator=EMT())
-    >>> BFGS(n2).run(fmax=0.01)
-    BFGS:   0  16:01:21        0.440339       3.2518
-    BFGS:   1  16:01:21        0.271928       0.8211
-    BFGS:   2  16:01:21        0.263278       0.1994
-    BFGS:   3  16:01:21        0.262777       0.0088
-    >>> vib = Vibrations(n2)
-    >>> vib.run()
-    >>> vib.summary()
-    ---------------------
-    #    meV     cm^-1
-    ---------------------
-    0    0.0       0.0
-    1    0.0       0.0
-    2    0.0       0.0
-    3    1.4      11.5
-    4    1.4      11.5
-    5  152.7    1231.3
-    ---------------------
-    Zero-point energy: 0.078 eV
-    >>> vib.write_mode(-1)  # write last mode to trajectory file
-
+        Example:
+        calc_kwargs = {
+            "input_data": input_data,
+            "profile": profile,  <----------------- EspressoProfile
+            "pseudopotentials": pseudopotentials,
+            "kpts": kpts,
+            "directory": "DFT",
+            "outdir": "tmp",
+            "file_name": "prefix",
+        }
     """
 
+
     def __init__(
-        self, atoms, indices=None, name="ir", delta=0.01, nfree=2, directions=[2]
+        self, atoms, calc_obj, indices=None, name="ir", delta=0.01, nfree=2,
+        directions=[2], calc_kwargs={}
     ):
         assert nfree in [2, 4]
         self.atoms = atoms
@@ -161,6 +159,7 @@ class Infrared_with_ESM(AtomicDisplacements):
         if len(indices) != len(set(indices)):
             raise ValueError("one (or more) indices included more than once")
         self.indices = np.asarray(indices)
+        self._name = name
 
         self.delta = delta
         self.nfree = nfree
@@ -171,6 +170,10 @@ class Infrared_with_ESM(AtomicDisplacements):
             self.directions = np.asarray([0, 1, 2])
         else:
             self.directions = np.asarray(directions)
+
+        # Calculator object and kwargs
+        self.calc_obj = calc_obj
+        self.calc_kwargs = calc_kwargs
         self.ir = True
 
         self.cache = get_json_cache(name)
@@ -179,10 +182,8 @@ class Infrared_with_ESM(AtomicDisplacements):
     def name(self):
         return str(self.cache.directory)
 
-    def run(
-        self, file_name="pwscf", outdir="tmp", pseudopotentials=None, pseudo_path=None
-    ):
-        """Run the vibration calculations.
+    def run(self):
+        """Run the vibration and Infrared calculations.
 
         This will calculate the forces for 6 displacements per atom +/-x,
         +/-y, +/-z. Only those calculations that are not already done will be
@@ -190,6 +191,9 @@ class Infrared_with_ESM(AtomicDisplacements):
         file (ending with .json), which must be deleted before restarting the
         job. Otherwise the forces will not be calculated for that
         displacement.
+
+        This will save each .esm1 file at each displacement to a directory 'esm1'
+        and calculate dipole moment from each .esm1 file.
 
         Note that the calculations for the different displacements can be done
         simultaneously by several independent processes. This feature relies
@@ -210,7 +214,13 @@ class Infrared_with_ESM(AtomicDisplacements):
 
         self._check_old_pickles()
 
-        json_dir = Path("./ir")
+        now_dir = Path(os.getcwd())
+        json_dir = Path(now_dir / self._name)
+        
+        pseudopotentials=self.calc_kwargs.get("pseudopotentials")
+        outdir = self.calc_kwargs.get("outdir")
+        directory_name = self.calc_kwargs.get("directory")
+        file_name = self.calc_kwargs.get('file_name')
 
         for disp, atoms in self.iterdisplace(inplace=True):
             with self.cache.lock(disp.name) as handle:
@@ -218,11 +228,11 @@ class Infrared_with_ESM(AtomicDisplacements):
                     continue
 
                 result = self.calculate(atoms, disp)
-                now_dir = Path(os.getcwd())
+                
                 save_dir = now_dir / "esm1"
                 os.makedirs(name=str(save_dir), exist_ok=True)
 
-                src_file = now_dir / outdir / f"{file_name}.esm1"
+                src_file = now_dir / directory_name / outdir / f"{file_name}.esm1"
                 dst_file = save_dir / f"{file_name}_{disp.name}.esm1"
 
                 if src_file.exists():
@@ -233,7 +243,7 @@ class Infrared_with_ESM(AtomicDisplacements):
 
                 esm1 = np.loadtxt(dst_file, skiprows=1)
 
-                # TODO Make the script for calculating dipole from esm1 file.
+                pseudo_path = Namelist(self.calc_kwargs.get("input_data"))['control']['pseudo_dir']
                 pseudo_path = Path(pseudo_path).expanduser()
                 valence_electrons = []
                 for i in range(len(atoms)):
@@ -324,8 +334,13 @@ Please remove them and recalculate or run \
                     yield self._disp(a, i, sign * ndisp)
 
     def calculate(self, atoms, disp):
+        # Set calculator
+        calc_kwargs = self.calc_kwargs.copy()
+        calc_kwargs = self.config_allowforce(calc_kwargs)  # Config allowforce
+        calc = self.calc_obj(**calc_kwargs)
+
         results = {}
-        results["forces"] = self.calc.get_forces(atoms)
+        results["forces"] = calc.get_forces(atoms)
 
         # if self.ir:
         #     results["dipole"] = self.calc.get_dipole_moment(atoms)
@@ -776,3 +791,17 @@ Please remove them and recalculate or run \
         return self.fold(
             frequencies, intensities, start, end, npts, width, type, normalize
         )
+
+    def config_allowforce(self, kwargs):
+        kwargs = kwargs.copy()
+
+        # Espresso-case
+        if self.calc_obj.__name__ == "Espresso":
+            input_data = Namelist(kwargs.pop("input_data", None))
+            input_data["control"].setdefault("tprnfor", True)
+            input_data["control"].setdefault("pseudo_dir", str(Path("~/QE/pseudo/").expanduser()))
+            input_data['control']['prefix'] = kwargs.get('file_name')
+            input_data['control']['outdir'] = kwargs.get('outdir')
+            kwargs["input_data"] = input_data
+
+        return kwargs
