@@ -221,6 +221,8 @@ class Infrared_with_ESM(AtomicDisplacements):
         outdir = self.calc_kwargs.get("outdir")
         directory_name = self.calc_kwargs.get("directory")
         file_name = self.calc_kwargs.get('file_name')
+        save_dir = now_dir / "esm1"
+        os.makedirs(name=str(save_dir), exist_ok=True)
 
         for disp, atoms in self.iterdisplace(inplace=True):
             with self.cache.lock(disp.name) as handle:
@@ -228,9 +230,6 @@ class Infrared_with_ESM(AtomicDisplacements):
                     continue
 
                 result = self.calculate(atoms, disp)
-                
-                save_dir = now_dir / "esm1"
-                os.makedirs(name=str(save_dir), exist_ok=True)
 
                 src_file = now_dir / directory_name / outdir / f"{file_name}.esm1"
                 dst_file = save_dir / f"{file_name}_{disp.name}.esm1"
