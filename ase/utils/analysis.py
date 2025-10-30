@@ -1,5 +1,5 @@
 from pathlib import Path
-from ase.utils.plot import plot_atoms, plot_cell
+from ase.utils.plot import plot_atoms, plot_cell, draw_axes
 from ase.vibrations import Infrared_with_ESM
 from typing import Union
 from ase.io import read, write
@@ -210,6 +210,7 @@ def write_gif(args: tuple):
             )
 
             plot_cell(ax=ax, cell=atom.get_cell(), plane=view)
+            draw_axes(ax, view, length=2.0)
 
             if view == "yz+":
                 ax.set_ylim(0 - 1, atom.get_cell().sum(axis=0)[2] + 1)
