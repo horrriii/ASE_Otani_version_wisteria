@@ -92,7 +92,7 @@ class Displacement(namedtuple("Displacement", ["a", "i", "sign", "ndisp", "vib"]
 
 
 class Infrared_with_ESM(AtomicDisplacements):
-    """Class for calculating vibrational modes and infrared (IR) intensities
+    """Class for calculating vibrational modes and infrared intensities
     using finite difference.
 
     The vibrational modes are calculated from a finite difference
@@ -119,33 +119,15 @@ class Infrared_with_ESM(AtomicDisplacements):
         Number of displacements per atom and cartesian coordinate, 2 and 4 are
         supported. Default is 2 which will displace each atom +delta and
         -delta for each cartesian coordinate.
-    directions : list of int  
-        Cartesian directions used to compute the dipole moment gradient.  
-        For example, `directions = [2]` considers only the dipole moment
-        along the z-direction.  
-        This option should generally be `[2]` when using this module with ESM,  
-        so you usually do not need to modify it.  
-    calc_obj : calculator object  
-        The calculator used for computations (e.g., Espresso).  
-    calc_kwargs : dict  
-        Dictionary of parameters to pass to the calculator (e.g., input_data).  
-        **Important:**  
-        The `'pseudo_dir'` parameter **must** be specified, because the
-        valence electrons of each atom are read from the pseudopotential file (`.p.p.`)
-        in order to calculate the dipole moment from the `.esm1` file.  
+    directions: list of int
+        Cartesian coordinates to calculate the gradient
+        of the dipole moment in.
+        For example directions = [2] only dipole moment in the z-direction will
+        be considered.
+        Basically this option should be [2] if you use this module with ESM.
+        So, you don't have to chenge this option.
 
-        Example:
-        calc_kwargs = {
-            "input_data": input_data,
-            "profile": profile,  <----------------- EspressoProfile
-            "pseudopotentials": pseudopotentials,
-            "kpts": kpts,
-            "directory": "DFT",
-            "outdir": "tmp",
-            "file_name": "prefix",
-        }
     """
-
 
     def __init__(
         self, atoms, calc_obj, indices=None, name="ir", delta=0.01, nfree=2,
@@ -216,13 +198,13 @@ class Infrared_with_ESM(AtomicDisplacements):
 
         now_dir = Path(os.getcwd())
         json_dir = Path(now_dir / self._name)
+        save_dir = now_dir / "output"
+        os.makedirs(name=str(save_dir), exist_ok=True)
         
         pseudopotentials=self.calc_kwargs.get("pseudopotentials")
         outdir = self.calc_kwargs.get("outdir")
         directory_name = self.calc_kwargs.get("directory")
         file_name = self.calc_kwargs.get('file_name')
-        save_dir = now_dir / "esm1"
-        os.makedirs(name=str(save_dir), exist_ok=True)
 
         for disp, atoms in self.iterdisplace(inplace=True):
             with self.cache.lock(disp.name) as handle:
@@ -231,16 +213,27 @@ class Infrared_with_ESM(AtomicDisplacements):
 
                 result = self.calculate(atoms, disp)
 
-                src_file = now_dir / directory_name / outdir / f"{file_name}.esm1"
-                dst_file = save_dir / f"{file_name}_{disp.name}.esm1"
-
-                if src_file.exists():
-                    shutil.copy(src=src_file, dst=dst_file)
-                    print(f"[INFO] Copied {src_file} → {dst_file}")
+                os.makedirs(save_dir / disp.name, exist_ok=True)
+                if Namelist(self.calc_kwargs.get("input_data"))['control']['trism'] == True:
+                    esm1_src_file = now_dir / directory_name / outdir / f"{file_name}.esm1"
+                    esm1_dst_file = save_dir / disp.name / f"{file_name}.esm1"
+                    
+                    drism_src_file = now_dir / directory_name / outdir / f"{file_name}.1drism"
+                    drism_dst_file = save_dir / disp.name / f"{file_name}.1drism"
+                    
+                    rism_src_file = now_dir / directory_name / outdir / f"{file_name}.rism1"
+                    rism_dst_file = save_dir / disp.name / f"{file_name}.rism1"
+                    
+                    shutil.copy(src=esm1_src_file, dst=esm1_dst_file)
+                    shutil.copy(src=drism_src_file, dst=drism_dst_file)
+                    shutil.copy(src=rism_src_file, dst=rism_dst_file)
                 else:
-                    print(f"[WARNING] Source file not found: {src_file}")
+                    esm1_src_file = now_dir / directory_name / outdir / f"{file_name}.esm1"
+                    esm1_dst_file = save_dir / disp.name / f"{file_name}.esm1"
+                    shutil.copy(src=esm1_src_file, dst=esm1_dst_file)
+                
 
-                esm1 = np.loadtxt(dst_file, skiprows=1)
+                esm1 = np.loadtxt(esm1_dst_file, skiprows=1)
 
                 pseudo_path = Namelist(self.calc_kwargs.get("input_data"))['control']['pseudo_dir']
                 pseudo_path = Path(pseudo_path).expanduser()
@@ -799,6 +792,7 @@ Please remove them and recalculate or run \
             input_data = Namelist(kwargs.pop("input_data", None))
             input_data["control"].setdefault("tprnfor", True)
             input_data["control"].setdefault("pseudo_dir", str(Path("~/QE/pseudo/").expanduser()))
+            input_data['control'].setdefault("trism", False)
             input_data['control']['prefix'] = kwargs.get('file_name')
             input_data['control']['outdir'] = kwargs.get('outdir')
             kwargs["input_data"] = input_data
