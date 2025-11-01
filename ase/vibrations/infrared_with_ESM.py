@@ -119,14 +119,31 @@ class Infrared_with_ESM(AtomicDisplacements):
         Number of displacements per atom and cartesian coordinate, 2 and 4 are
         supported. Default is 2 which will displace each atom +delta and
         -delta for each cartesian coordinate.
-    directions: list of int
-        Cartesian coordinates to calculate the gradient
-        of the dipole moment in.
-        For example directions = [2] only dipole moment in the z-direction will
-        be considered.
-        Basically this option should be [2] if you use this module with ESM.
-        So, you don't have to chenge this option.
+    directions : list of int
+        Cartesian directions used to compute the dipole moment gradient.
+        For example, `directions = [2]` considers only the dipole moment
+        along the z-direction.
+        This option should generally be `[2]` when using this module with ESM,
+        so you usually do not need to modify it.
+    calc_obj : calculator object
+        The calculator used for computations (e.g., Espresso).
+    calc_kwargs : dict
+        Dictionary of parameters to pass to the calculator (e.g., input_data).
+        **Important:**
+        The `'pseudo_dir'` parameter **must** be specified, because the
+        valence electrons of each atom are read from the pseudopotential file (`.p.p.`)
+        in order to calculate the dipole moment from the `.esm1` file.
 
+        Example:
+        calc_kwargs = {
+            "input_data": input_data,
+            "profile": profile,  <----------------- EspressoProfile
+            "pseudopotentials": pseudopotentials,
+            "kpts": kpts,
+            "directory": "DFT",
+            "outdir": "tmp",
+            "file_name": "prefix",
+        }
     """
 
     def __init__(
