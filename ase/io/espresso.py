@@ -1787,14 +1787,19 @@ def write_espresso_in(fd, atoms, input_data=None, pseudopotentials=None,
         input_parameters['system']['ibrav'] = 0
 
     # Construct solvent information
-    if input_parameters['control']['trism'] == True:
-        solvents_str = []
-        for solvent in solvents_info.keys():
-            if solvent != 'density_unit':
-                solvents_str.append(
-                    '{solvent}  {density}  {mol}\n'.format(
-                        solvent=solvent, density=solvents_info[solvent][0],
-                        mol=solvents_info[solvent][1]))
+    if 'trism' not in input_parameters['control']:
+        pass
+    else:
+        if input_parameters['control']['trism'] == True:
+            solvents_str = []
+            for solvent in solvents_info.keys():
+                if solvent != 'density_unit':
+                    solvents_str.append(
+                        '{solvent}  {density}  {mol}\n'.format(
+                            solvent=solvent, density=solvents_info[solvent][0],
+                            mol=solvents_info[solvent][1]))
+        else:
+            pass
 
     # Construct input file into this
     pwi = []
