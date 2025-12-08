@@ -241,13 +241,30 @@ class Infrared_with_ESM(AtomicDisplacements):
                     rism_src_file = now_dir / directory_name / outdir / f"{file_name}.rism1"
                     rism_dst_file = save_dir / disp.name / f"{file_name}.rism1"
                     
+                    pwi_src_file = now_dir / directory_name / 'espresso.pwi'
+                    pwi_dst_file = save_dir / disp.name / 'espresso.pwi'
+                    
+                    pwo_src_file = now_dir / directory_name / 'espresso.pwo'
+                    pwo_dst_file = save_dir / disp.name / 'espresso.pwo'
+                    
                     shutil.copy(src=esm1_src_file, dst=esm1_dst_file)
                     shutil.copy(src=drism_src_file, dst=drism_dst_file)
                     shutil.copy(src=rism_src_file, dst=rism_dst_file)
+                    shutil.copy(src=pwi_src_file, dst=pwi_dst_file)
+                    shutil.copy(src=pwo_src_file, dst=pwo_dst_file)
                 else:
                     esm1_src_file = now_dir / directory_name / outdir / f"{file_name}.esm1"
                     esm1_dst_file = save_dir / disp.name / f"{file_name}.esm1"
+                    
+                    pwi_src_file = now_dir / directory_name / 'espresso.pwi'
+                    pwi_dst_file = save_dir / disp.name / 'espresso.pwi'
+                    
+                    pwo_src_file = now_dir / directory_name / 'espresso.pwo'
+                    pwo_dst_file = save_dir / disp.name / 'espresso.pwo'
+                    
                     shutil.copy(src=esm1_src_file, dst=esm1_dst_file)
+                    shutil.copy(src=pwi_src_file, dst=pwi_dst_file)
+                    shutil.copy(src=pwo_src_file, dst=pwo_dst_file)
                 
 
                 esm1 = np.loadtxt(esm1_dst_file, skiprows=1)
