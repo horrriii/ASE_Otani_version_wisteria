@@ -14,7 +14,7 @@ def make_calculation_directory(
 
     os.makedirs(name=directory_name, exist_ok=True)
     if srcdir_of_tmp is not None:
-        srcdir_of_tmp = str((Path(srcdir_of_tmp) / "DFT" / "tmp").expanduser())
+        srcdir_of_tmp = str((Path(srcdir_of_tmp) / "tmp").expanduser())
         srcdir_of_tmp = srcdir_of_tmp.replace("work/03", "data/scratch", 1)
         if os.path.lexists(link_path):
             if os.path.islink(link_path):
@@ -33,7 +33,6 @@ def make_calculation_directory(
     os.symlink(link_path, target_path)
     os.symlink(kernel_path, os.path.join(DFT_path, "vdW_kernel_table"))
 
-
 def copy_temp_file(directory_name: str, outdir: str, save_dir: str, prefix: str):
     DFT_path = os.getcwd() + "/" + directory_name
     target_path = DFT_path + "/" + outdir
@@ -45,3 +44,21 @@ def copy_temp_file(directory_name: str, outdir: str, save_dir: str, prefix: str)
             shutil.copy(src=src_path, dst=save_dir)
         else:
             pass
+
+def get_total_charge(src_path:Path):
+    with open(src_path / 'espresso.pwo') as f:
+        lines = [line for line in f if 'FCP: Total Charge' in line]
+    
+    if not lines:
+        with open(src_path / 'espresso.pwi') as f:
+            lines = [line for line in f if 'tot_charge' in line]
+        final_line = lines[-1]
+    
+    else:
+        final_line = lines[-1]
+    
+    final_charge = final_line.split('=')[1]
+    final_charge = float(final_charge)
+    
+    return final_charge
+
